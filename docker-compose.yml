@@ -1,0 +1,144 @@
+services:
+  app:
+    container_name: video-bot-app
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN must be set}
+      BOT_USERNAME: ${BOT_USERNAME:?BOT_USERNAME must be set}
+      DB_URL: jdbc:postgresql://postgres:5432/jackpot_saver
+      DB_USERNAME: jackpot
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS:-}
+      DATA_HASH_KEY: ${DATA_HASH_KEY:?DATA_HASH_KEY must be set}
+      YTDLP_COMMAND: yt-dlp
+      LOG_DIR: /app/logs
+      HOME: /tmp
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+    volumes:
+      - ./storage:/app/storage
+      - ./tmp:/app/tmp
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:exec,mode=1777
+      - /app/logs:uid=10001,gid=10001,mode=0750
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 2.0
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  postgres:
+    container_name: video-bot-postgres
+    image: postgres:16-alpine@sha256:16bc17c64a573ef34162af9298258d1aec548232985b33ed7b1eac33ba35c229
+    environment:
+      POSTGRES_DB: jackpot_saver
+      POSTGRES_USER: jackpot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jackpot -d jackpot_saver"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 100
+
+  postgres-backup:
+    container_name: video-bot-postgres-backup
+    build:
+      context: ./ops/postgres-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: jackpot_saver
+      PGUSER: jackpot
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN must be set}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_INSTANCE: ${ALERT_INSTANCE:-jackpot-saver}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-jackpot-saver}
+      RCLONE_CONFIG_BACKUP_TYPE: s3
+      RCLONE_CONFIG_BACKUP_PROVIDER: ${BACKUP_S3_PROVIDER:-AWS}
+      RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_BACKUP_REGION: ${BACKUP_S3_REGION:-}
+      RCLONE_CONFIG_BACKUP_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+    volumes:
+      - postgres-backups:/backups
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10002,gid=10002,mode=0700
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 50
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /backups/.last-success && test $$(($$(date +%s) - $$(cat /backups/.last-success))) -lt $${BACKUP_MAX_AGE_SECONDS:-93600}"]
+      interval: 5m
+      timeout: 5s
+      start_period: 5m
+      retries: 2
+
+  monitor:
+    container_name: video-bot-monitor
+    build:
+      context: ./ops/monitor
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: jackpot_saver
+      PGUSER: jackpot
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN must be set}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_INSTANCE: ${ALERT_INSTANCE:-jackpot-saver}
+      MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-60}
+      MONITOR_FAILURE_THRESHOLD: ${MONITOR_FAILURE_THRESHOLD:-3}
+      MONITOR_REMINDER_SECONDS: ${MONITOR_REMINDER_SECONDS:-3600}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10003,gid=10003,mode=0700
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 30
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/.last-check && test $$(($$(date +%s) - $$(cat /tmp/.last-check))) -lt 180"]
+      interval: 1m
+      timeout: 5s
+      start_period: 30s
+      retries: 2
+
+volumes:
+  postgres-data:
+  postgres-backups:

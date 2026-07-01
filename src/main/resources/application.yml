@@ -1,0 +1,79 @@
+spring:
+  application:
+    name: jackpot-saver-bot
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jackpot_saver}
+    username: ${DB_USERNAME:jackpot}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+bot:
+  token: ${BOT_TOKEN:}
+  username: ${BOT_USERNAME:}
+  polling:
+    enabled: ${BOT_POLLING_ENABLED:true}
+    timeout-seconds: ${BOT_POLLING_TIMEOUT_SECONDS:25}
+    unhealthy-after-seconds: ${BOT_POLLING_UNHEALTHY_AFTER_SECONDS:300}
+  network:
+    connect-timeout-seconds: ${BOT_CONNECT_TIMEOUT_SECONDS:10}
+    response-timeout-seconds: ${BOT_RESPONSE_TIMEOUT_SECONDS:240}
+    max-retries: ${BOT_MAX_RETRIES:3}
+    retry-base-delay-millis: ${BOT_RETRY_BASE_DELAY_MILLIS:500}
+
+download:
+  temp-dir: ${DOWNLOAD_TEMP_DIR:./tmp}
+  storage-dir: ${DOWNLOAD_STORAGE_DIR:./storage}
+  max-parallel-jobs: ${DOWNLOAD_MAX_PARALLEL_JOBS:3}
+  max-file-size-mb: ${DOWNLOAD_MAX_FILE_SIZE_MB:48}
+  file-lifetime-hours: ${DOWNLOAD_FILE_LIFETIME_HOURS:24}
+  cleanup-interval-minutes: ${DOWNLOAD_CLEANUP_INTERVAL_MINUTES:30}
+  worker-interval-ms: ${DOWNLOAD_WORKER_INTERVAL_MS:1000}
+  stalled-job-timeout-minutes: ${DOWNLOAD_STALLED_JOB_TIMEOUT_MINUTES:60}
+  max-attempts: ${DOWNLOAD_MAX_ATTEMPTS:3}
+  retry-delay-seconds: ${DOWNLOAD_RETRY_DELAY_SECONDS:15}
+  yt-dlp-timeout-seconds: ${DOWNLOAD_YTDLP_TIMEOUT_SECONDS:180}
+  yt-dlp-command: ${YTDLP_COMMAND:yt-dlp}
+
+limits:
+  request-cooldown-seconds: ${LIMIT_REQUEST_COOLDOWN_SECONDS:10}
+  downloads-per-day: ${LIMIT_DOWNLOADS_PER_DAY:20}
+
+admin:
+  telegram-ids: ${ADMIN_TELEGRAM_IDS:}
+
+security:
+  data-hash-key: ${DATA_HASH_KEY:development-only-key-change-before-production}
+
+retention:
+  telegram-updates-days: ${RETENTION_TELEGRAM_UPDATES_DAYS:7}
+  error-logs-days: ${RETENTION_ERROR_LOGS_DAYS:30}
+  admin-actions-days: ${RETENTION_ADMIN_ACTIONS_DAYS:180}
+  requests-days: ${RETENTION_REQUESTS_DAYS:30}
+  deleted-files-days: ${RETENTION_DELETED_FILES_DAYS:7}
+  cleanup-cron: ${RETENTION_CLEANUP_CRON:0 30 3 * * *}
+
+logging:
+  level:
+    com.jackpotsaver: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,db,telegram
+  metrics:
+    tags:
+      application: ${spring.application.name}

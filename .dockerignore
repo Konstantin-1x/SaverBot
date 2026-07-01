@@ -1,0 +1,10 @@
+.gradle
+.gradle-test
+.idea
+.git
+.env
+logs
+storage
+tmp
+backups
+*.iml
