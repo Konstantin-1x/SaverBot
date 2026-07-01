@@ -5,6 +5,6 @@ import com.jackpotsaver.bot.domain.Platform;
 
 public record VideoLink(String sourceUrl, String normalizedUrl, Platform platform, MediaType mediaType) {
     public boolean qualityRequired() {
-        return false;
+        return mediaType == MediaType.YOUTUBE_VIDEO;
     }
 }

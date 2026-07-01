@@ -26,16 +26,46 @@ public class VideoDownloader {
     }
 
     public DownloadedVideo download(String url, VideoQuality quality) {
+        if (isYouTubeShorts(url)) {
+            return downloadYouTubeShorts(url);
+        }
         VideoQuality resolvedQuality = resolveQuality(url, quality);
-        log.info("Starting yt-dlp download with requestedQuality={} resolvedQuality={} url={}",
-                quality, resolvedQuality, url);
+        log.info("Starting yt-dlp download with requestedQuality={} resolvedQuality={}",
+                quality, resolvedQuality);
         return downloadSingle(url, resolvedQuality.name(), format(resolvedQuality, isYouTube(url)));
+    }
+
+    private DownloadedVideo downloadYouTubeShorts(String url) {
+        int[] heights = {1080, 720, 480, 360};
+        VideoDownloadException lastFailure = null;
+        for (int height : heights) {
+            try {
+                DownloadedVideo video = downloadSingle(
+                        url, "SHORTS_" + height, formatForHeight(height, true));
+                long maxBytes = properties.maxFileSizeMb() * 1024 * 1024;
+                if (video.sizeBytes() <= maxBytes) {
+                    return video;
+                }
+                Files.deleteIfExists(video.path());
+                log.info("YouTube Shorts {}p candidate exceeded the configured size limit; trying lower quality",
+                        height);
+            } catch (IOException ex) {
+                throw new VideoDownloadException("Could not remove oversized Shorts candidate", ex);
+            } catch (VideoDownloadException ex) {
+                lastFailure = ex;
+                if (!allowsQualityFallback(ex)) {
+                    throw ex;
+                }
+                log.info("YouTube Shorts {}p candidate is unavailable or too large; trying lower quality", height);
+            }
+        }
+        throw new VideoDownloadException("No YouTube Shorts quality fits the configured file size", lastFailure);
     }
 
     private DownloadedVideo downloadSingle(String url, String qualityLabel, String ytDlpFormat) {
         Instant startedAt = Instant.now();
         try {
-            log.info("Starting yt-dlp download with resolvedQuality={} url={}", qualityLabel, url);
+            log.info("Starting yt-dlp download with resolvedQuality={}", qualityLabel);
             Files.createDirectories(properties.tempDir());
             Files.createDirectories(properties.storageDir());
             Path workDir = properties.tempDir().resolve(UUID.randomUUID().toString());
@@ -103,18 +133,29 @@ public class VideoDownloader {
     }
 
     private VideoQuality resolveQuality(String url, VideoQuality quality) {
-        if (isYouTube(url)) {
-            return VideoQuality.LOW;
-        }
-        if (quality != VideoQuality.AUTO) {
+        if (quality != null && quality != VideoQuality.AUTO) {
             return quality;
         }
-        return VideoQuality.LOW;
+        return isYouTube(url) ? VideoQuality.MEDIUM : VideoQuality.LOW;
     }
 
     private boolean isYouTube(String url) {
         String lower = url == null ? "" : url.toLowerCase();
         return lower.contains("youtube.com") || lower.contains("youtu.be");
+    }
+
+    private boolean isYouTubeShorts(String url) {
+        String lower = url == null ? "" : url.toLowerCase();
+        return lower.contains("youtube.com/shorts/");
+    }
+
+    private boolean allowsQualityFallback(VideoDownloadException exception) {
+        String message = exception.getMessage() == null ? "" : exception.getMessage().toLowerCase();
+        return message.contains("max-filesize")
+                || message.contains("larger than")
+                || message.contains("requested format")
+                || message.contains("no video formats")
+                || message.contains("does not pass filter");
     }
 
     private String format(VideoQuality quality) {

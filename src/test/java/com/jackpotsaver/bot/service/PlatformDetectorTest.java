@@ -15,7 +15,7 @@ class PlatformDetectorTest {
 
         assertThat(link.platform()).isEqualTo(Platform.YOUTUBE);
         assertThat(link.mediaType()).isEqualTo(MediaType.YOUTUBE_VIDEO);
-        assertThat(link.qualityRequired()).isFalse();
+        assertThat(link.qualityRequired()).isTrue();
         assertThat(link.normalizedUrl()).isEqualTo("https://youtube.com/watch?v=abc123");
     }
 

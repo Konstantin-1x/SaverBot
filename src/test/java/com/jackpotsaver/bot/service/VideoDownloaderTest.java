@@ -35,4 +35,34 @@ class VideoDownloaderTest {
                 .contains("height<=360")
                 .doesNotContain("/best");
     }
+
+    @Test
+    void regularYoutubeHonorsSelectedQualityAndAutoDefaultsTo720p() throws Exception {
+        VideoDownloader downloader = downloader();
+        Method resolve = VideoDownloader.class.getDeclaredMethod(
+                "resolveQuality", String.class, VideoQuality.class);
+        resolve.setAccessible(true);
+
+        assertThat(resolve.invoke(
+                downloader, "https://youtube.com/watch?v=test", VideoQuality.HIGH))
+                .isEqualTo(VideoQuality.HIGH);
+        assertThat(resolve.invoke(
+                downloader, "https://youtube.com/watch?v=test", VideoQuality.AUTO))
+                .isEqualTo(VideoQuality.MEDIUM);
+    }
+
+    @Test
+    void shortsDetectionIsLimitedToShortsUrls() throws Exception {
+        VideoDownloader downloader = downloader();
+        Method isShorts = VideoDownloader.class.getDeclaredMethod("isYouTubeShorts", String.class);
+        isShorts.setAccessible(true);
+
+        assertThat(isShorts.invoke(downloader, "https://youtube.com/shorts/abc")).isEqualTo(true);
+        assertThat(isShorts.invoke(downloader, "https://youtube.com/watch?v=abc")).isEqualTo(false);
+    }
+
+    private VideoDownloader downloader() {
+        return new VideoDownloader(new DownloadProperties(
+                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp"));
+    }
 }
