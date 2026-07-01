@@ -20,7 +20,7 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/wrapper-validation@v6
       - name: Run unit and PostgreSQL integration tests
         run: ./gradlew clean test --no-daemon
       - name: Upload test report
