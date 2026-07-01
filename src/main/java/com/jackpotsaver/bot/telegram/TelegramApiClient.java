@@ -197,22 +197,22 @@ public class TelegramApiClient {
             int status = response.getStatusCode().value();
             if (status == 429) {
                 return new TelegramApiException(TelegramApiException.Kind.RATE_LIMIT,
-                        "Telegram rate limit", retryAfterMillis(response), response);
+                        "Telegram rate limit", retryAfterMillis(response), null);
             }
             if (status >= 500) {
                 return new TelegramApiException(TelegramApiException.Kind.SERVER,
-                        "Telegram server error " + status, null, response);
+                        "Telegram server error " + status, null, null);
             }
             return new TelegramApiException(TelegramApiException.Kind.CLIENT,
-                    "Telegram client error " + status, null, response);
+                    "Telegram client error " + status, null, null);
         }
         if (exception.getCause() instanceof java.util.concurrent.TimeoutException
                 || exception instanceof org.springframework.web.reactive.function.client.WebClientRequestException) {
             return new TelegramApiException(TelegramApiException.Kind.NETWORK,
-                    "Telegram network failure", null, exception);
+                    "Telegram network failure", null, null);
         }
         return new TelegramApiException(TelegramApiException.Kind.UNKNOWN,
-                "Unexpected Telegram failure", null, exception);
+                "Unexpected Telegram failure", null, null);
     }
 
     private Long retryAfterMillis(WebClientResponseException response) {

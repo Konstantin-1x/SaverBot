@@ -76,6 +76,8 @@ public class VideoDownloader {
             command.add(properties.ytDlpCommand());
             command.add("--no-playlist");
             command.add("--no-progress");
+            command.add("--js-runtimes");
+            command.add("deno");
             command.add("--socket-timeout");
             command.add("8");
             command.add("--retries");

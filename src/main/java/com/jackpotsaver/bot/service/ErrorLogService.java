@@ -23,8 +23,11 @@ public class ErrorLogService {
     }
 
     public void record(User user, DownloadRequest request, String code, String message, Throwable throwable) {
-        log.warn("{}: {}", code, message, throwable);
-        repository.save(new ErrorLog(user, request, code, message, stackTrace(throwable), clock.instant()));
+        String safeMessage = SensitiveDataSanitizer.sanitize(message);
+        log.warn("{}: {}", code, safeMessage);
+        repository.save(new ErrorLog(
+                user, request, code, safeMessage,
+                SensitiveDataSanitizer.sanitize(stackTrace(throwable)), clock.instant()));
     }
 
     private String stackTrace(Throwable throwable) {

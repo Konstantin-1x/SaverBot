@@ -185,8 +185,8 @@ public class DownloadJobProcessor {
             }
         }
         if (storedFileId != null) {
-            transactionTemplate.executeWithoutResult(status -> storedFileRepository.findById(storedFileId)
-                    .ifPresent(file -> file.markDeleted(clock.instant())));
+            transactionTemplate.executeWithoutResult(status ->
+                    storedFileRepository.findById(storedFileId).ifPresent(storedFileRepository::delete));
         }
     }
 
@@ -255,7 +255,8 @@ public class DownloadJobProcessor {
             request.redactUrls();
             job.fail(code, details, clock.instant());
             if (exception != null) {
-                errorLogService.record(request.getUser(), request, code, details, exception);
+                errorLogService.record(request.getUser(), request, code,
+                        SensitiveDataSanitizer.sanitize(details), exception);
             }
         });
     }
@@ -278,15 +279,17 @@ public class DownloadJobProcessor {
                 job.retry(code, details, nextAttempt);
                 request.status(RequestStatus.LOADING, clock.instant());
             }
-            errorLogService.record(request.getUser(), request, code, details, exception);
+            errorLogService.record(request.getUser(), request, code,
+                    SensitiveDataSanitizer.sanitize(details), exception);
             return exhausted;
         });
         if (Boolean.TRUE.equals(deadLettered)) {
-            log.error("Download job {} exhausted {} attempts and moved to DEAD_LETTER",
-                    jobId, properties.maxAttempts(), exception);
+            log.error("Download job {} exhausted {} attempts and moved to DEAD_LETTER: {}",
+                    jobId, properties.maxAttempts(), SensitiveDataSanitizer.sanitize(exception.getMessage()));
             return true;
         }
-        log.warn("Download job {} failed and was scheduled for retry", jobId, exception);
+        log.warn("Download job {} failed and was scheduled for retry: {}",
+                jobId, SensitiveDataSanitizer.sanitize(exception.getMessage()));
         return false;
     }
 

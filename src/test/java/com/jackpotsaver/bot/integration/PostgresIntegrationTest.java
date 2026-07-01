@@ -9,11 +9,13 @@ import com.jackpotsaver.bot.domain.JobStatus;
 import com.jackpotsaver.bot.domain.MediaType;
 import com.jackpotsaver.bot.domain.Platform;
 import com.jackpotsaver.bot.domain.RequestStatus;
+import com.jackpotsaver.bot.domain.StoredFile;
 import com.jackpotsaver.bot.domain.User;
 import com.jackpotsaver.bot.domain.VideoQuality;
 import com.jackpotsaver.bot.repository.DownloadJobRepository;
 import com.jackpotsaver.bot.repository.DownloadRequestRepository;
 import com.jackpotsaver.bot.repository.UserRepository;
+import com.jackpotsaver.bot.repository.StoredFileRepository;
 import com.jackpotsaver.bot.telegram.TelegramUpdateTracker;
 import java.time.Clock;
 import java.time.Instant;
@@ -53,13 +55,15 @@ class PostgresIntegrationTest {
     DownloadRequestRepository requests;
     @Autowired
     DownloadJobRepository jobs;
+    @Autowired
+    StoredFileRepository files;
 
     @Test
     void flywayCreatesLatestSchema() {
         Integer version = jdbcTemplate.queryForObject(
                 "select max(version::integer) from flyway_schema_history where success", Integer.class);
 
-        assertThat(version).isEqualTo(13);
+        assertThat(version).isEqualTo(14);
         assertThat(tableExists("telegram_updates")).isTrue();
         assertThat(tableExists("download_job_subscribers")).isTrue();
         assertThat(columnExists("stored_files", "normalized_url")).isFalse();
@@ -121,6 +125,21 @@ class PostgresIntegrationTest {
 
         org.junit.jupiter.api.Assertions.assertThrows(DataIntegrityViolationException.class,
                 () -> jobs.saveAndFlush(new DownloadJob(request(), "same-download")));
+    }
+
+    @Test
+    void deletingFailedStagingFileAllowsRetryForSameRequest() {
+        DownloadRequest request = request();
+        Instant now = Instant.now();
+        StoredFile first = files.saveAndFlush(new StoredFile(
+                request, "storage/first.mp4", 100, now, now.plusSeconds(3600)));
+
+        files.delete(first);
+        files.flush();
+
+        StoredFile replacement = files.saveAndFlush(new StoredFile(
+                request, "storage/retry.mp4", 100, now, now.plusSeconds(3600)));
+        assertThat(replacement.getId()).isNotNull();
     }
 
     private boolean tableExists(String table) {
