@@ -16,6 +16,7 @@ public record DownloadProperties(
         int maxAttempts,
         long retryDelaySeconds,
         long ytDlpTimeoutSeconds,
-        String ytDlpCommand
+        String ytDlpCommand,
+        Path cookiesFile
 ) {
 }

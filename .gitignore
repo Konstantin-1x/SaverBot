@@ -6,6 +6,8 @@ backups/
 /logs/
 /storage/
 /tmp/
+/secrets/*
+!/secrets/.gitkeep
 /.agents/
 /.dockerconfig/
 .dockerconfig/

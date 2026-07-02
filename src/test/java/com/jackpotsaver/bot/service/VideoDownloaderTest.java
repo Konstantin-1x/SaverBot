@@ -12,7 +12,7 @@ class VideoDownloaderTest {
     @Test
     void mapsUserQualityToYtDlpFormats() throws Exception {
         DownloadProperties properties = new DownloadProperties(
-                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp");
+                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp", null);
         VideoDownloader downloader = new VideoDownloader(properties);
         Method format = VideoDownloader.class.getDeclaredMethod("format", VideoQuality.class);
         format.setAccessible(true);
@@ -26,7 +26,7 @@ class VideoDownloaderTest {
     @Test
     void strictYoutubeFormatDoesNotFallbackToUnboundedBest() throws Exception {
         DownloadProperties properties = new DownloadProperties(
-                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp");
+                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp", null);
         VideoDownloader downloader = new VideoDownloader(properties);
         Method format = VideoDownloader.class.getDeclaredMethod("format", VideoQuality.class, boolean.class);
         format.setAccessible(true);
@@ -63,6 +63,6 @@ class VideoDownloaderTest {
 
     private VideoDownloader downloader() {
         return new VideoDownloader(new DownloadProperties(
-                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp"));
+                Path.of("tmp"), Path.of("storage"), 3, 48, 24, 30, 5000, 60, 3, 15, 180, "yt-dlp", null));
     }
 }

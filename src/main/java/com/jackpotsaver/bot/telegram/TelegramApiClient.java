@@ -154,6 +154,30 @@ public class TelegramApiClient {
                 .block());
     }
 
+    public JsonNode sendPhoto(long chatId, String telegramFileId, String caption) {
+        return execute("sendPhoto", false, () -> webClient.post()
+                .uri("/sendPhoto")
+                .bodyValue(Map.of(
+                        "chat_id", chatId,
+                        "photo", telegramFileId,
+                        "caption", caption == null ? "" : caption))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block());
+    }
+
+    public JsonNode sendMediaVideo(long chatId, String telegramFileId, String caption) {
+        return execute("sendVideo", false, () -> webClient.post()
+                .uri("/sendVideo")
+                .bodyValue(Map.of(
+                        "chat_id", chatId,
+                        "video", telegramFileId,
+                        "caption", caption == null ? "" : caption))
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block());
+    }
+
     public boolean configured() {
         return properties.configured();
     }

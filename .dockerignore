@@ -7,4 +7,5 @@ logs
 storage
 tmp
 backups
+secrets
 *.iml

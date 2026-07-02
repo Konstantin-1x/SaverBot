@@ -38,6 +38,7 @@ download:
   retry-delay-seconds: ${DOWNLOAD_RETRY_DELAY_SECONDS:15}
   yt-dlp-timeout-seconds: ${DOWNLOAD_YTDLP_TIMEOUT_SECONDS:180}
   yt-dlp-command: ${YTDLP_COMMAND:yt-dlp}
+  cookies-file: ${YTDLP_COOKIES_FILE:}
 
 limits:
   request-cooldown-seconds: ${LIMIT_REQUEST_COOLDOWN_SECONDS:10}

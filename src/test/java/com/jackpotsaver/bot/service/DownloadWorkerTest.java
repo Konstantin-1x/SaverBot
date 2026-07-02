@@ -39,7 +39,7 @@ class DownloadWorkerTest {
     @Test
     void doesNotQueueMoreJobsWhileAllWorkerSlotsAreBusy() throws Exception {
         DownloadProperties properties = new DownloadProperties(
-                Path.of("tmp"), Path.of("storage"), 2, 48, 24, 30, 1000, 60, 3, 15, 180, "yt-dlp");
+                Path.of("tmp"), Path.of("storage"), 2, 48, 24, 30, 1000, 60, 3, 15, 180, "yt-dlp", null);
         worker = new DownloadWorker(repository, properties, processor,
                 Clock.fixed(Instant.parse("2026-06-30T00:00:00Z"), ZoneOffset.UTC));
 
@@ -67,7 +67,7 @@ class DownloadWorkerTest {
     @Test
     void takesNextJobAfterCapacityBecomesAvailable() throws Exception {
         DownloadProperties properties = new DownloadProperties(
-                Path.of("tmp"), Path.of("storage"), 1, 48, 24, 30, 1000, 60, 3, 15, 180, "yt-dlp");
+                Path.of("tmp"), Path.of("storage"), 1, 48, 24, 30, 1000, 60, 3, 15, 180, "yt-dlp", null);
         worker = new DownloadWorker(repository, properties, processor,
                 Clock.fixed(Instant.parse("2026-06-30T00:00:00Z"), ZoneOffset.UTC));
 

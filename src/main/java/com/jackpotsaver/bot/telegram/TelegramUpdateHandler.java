@@ -2,12 +2,14 @@ package com.jackpotsaver.bot.telegram;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jackpotsaver.bot.domain.InterfaceLanguage;
+import com.jackpotsaver.bot.domain.AdMediaType;
 import com.jackpotsaver.bot.domain.User;
 import com.jackpotsaver.bot.domain.VideoQuality;
 import com.jackpotsaver.bot.service.AdminConversationService;
 import com.jackpotsaver.bot.service.AdminConversationState;
 import com.jackpotsaver.bot.service.AdminService;
 import com.jackpotsaver.bot.service.MessageCatalog;
+import com.jackpotsaver.bot.service.MediaContent;
 import com.jackpotsaver.bot.service.TelegramUser;
 import com.jackpotsaver.bot.service.UpdateOrchestrator;
 import com.jackpotsaver.bot.service.UserService;
@@ -63,7 +65,7 @@ public class TelegramUpdateHandler {
             apiClient.sendMessage(chatId, "Действие отменено.", adminReplyKeyboard());
             return;
         }
-        if (user.admin() && !text.startsWith("/") && handleAdminState(chatId, user, text)) {
+        if (user.admin() && !text.startsWith("/") && handleAdminState(chatId, user, message)) {
             return;
         }
         if (text.equals("/start")) {
@@ -107,6 +109,10 @@ public class TelegramUpdateHandler {
         }
         if (text.startsWith("/broadcast") && user.admin()) {
             apiClient.sendMessage(chatId, adminService.broadcast(user, commandText(text)));
+            return;
+        }
+        if (text.startsWith("/ad_frequency") && user.admin()) {
+            apiClient.sendMessage(chatId, adminService.setAdFrequency(user, parseLong(commandText(text))));
             return;
         }
         if (text.startsWith("/block") && user.admin()) {
@@ -169,14 +175,18 @@ public class TelegramUpdateHandler {
         }
     }
 
-    private boolean handleAdminState(long chatId, User user, String text) {
+    private boolean handleAdminState(long chatId, User user, JsonNode message) {
+        MediaContent content = mediaContent(message);
+        String text = content.text() == null ? "" : content.text();
         return adminConversationService.take(user.getTelegramId())
                 .map(state -> {
                     switch (state) {
                         case WAITING_AFTER_DOWNLOAD_AD ->
-                                apiClient.sendMessage(chatId, adminService.setAfterDownloadAd(user, text), adminReplyKeyboard());
+                                apiClient.sendMessage(chatId, adminService.setAfterDownloadAd(user, content), adminReplyKeyboard());
                         case WAITING_BROADCAST ->
-                                apiClient.sendMessage(chatId, adminService.broadcast(user, text), adminReplyKeyboard());
+                                apiClient.sendMessage(chatId, adminService.broadcast(user, content), adminReplyKeyboard());
+                        case WAITING_AD_FREQUENCY ->
+                                apiClient.sendMessage(chatId, adminService.setAdFrequency(user, parseLong(text)), adminReplyKeyboard());
                         case WAITING_ADD_ADMIN ->
                                 apiClient.sendMessage(chatId, adminService.addAdmin(user, text), adminReplyKeyboard());
                         case WAITING_REMOVE_ADMIN ->
@@ -193,12 +203,22 @@ public class TelegramUpdateHandler {
             case "Ошибки" -> apiClient.sendMessage(chatId, adminService.errors(), adminReplyKeyboard());
             case "Реклама после скачивания" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_AFTER_DOWNLOAD_AD);
-                apiClient.sendMessage(chatId, "Отправьте текст рекламы после скачивания.", adminWaitingReplyKeyboard());
+                apiClient.sendMessage(chatId,
+                        "Отправьте текст или одним сообщением фото/видео с рекламной подписью.",
+                        adminWaitingReplyKeyboard());
             }
             case "Отключить рекламу" -> apiClient.sendMessage(chatId, adminService.clearAfterDownloadAd(user), adminReplyKeyboard());
             case "Рассылка" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_BROADCAST);
-                apiClient.sendMessage(chatId, "Отправьте текст рассылки всем пользователям.", adminWaitingReplyKeyboard());
+                apiClient.sendMessage(chatId,
+                        "Отправьте текст или одним сообщением фото/видео с подписью для рассылки.",
+                        adminWaitingReplyKeyboard());
+            }
+            case "Частота рекламы" -> {
+                adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_AD_FREQUENCY);
+                apiClient.sendMessage(chatId,
+                        "Отправьте число N: реклама будет показана после каждого N-го скачивания пользователя.",
+                        adminWaitingReplyKeyboard());
             }
             case "Добавить админа" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_ADD_ADMIN);
@@ -234,12 +254,22 @@ public class TelegramUpdateHandler {
             case "admin:errors" -> apiClient.sendMessage(chatId, adminService.errors(), adminReplyKeyboard());
             case "admin:ad_after" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_AFTER_DOWNLOAD_AD);
-                apiClient.sendMessage(chatId, "Отправьте текст рекламы после скачивания.", adminWaitingReplyKeyboard());
+                apiClient.sendMessage(chatId,
+                        "Отправьте текст или одним сообщением фото/видео с рекламной подписью.",
+                        adminWaitingReplyKeyboard());
             }
             case "admin:ad_after_off" -> apiClient.sendMessage(chatId, adminService.clearAfterDownloadAd(user), adminReplyKeyboard());
             case "admin:broadcast" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_BROADCAST);
-                apiClient.sendMessage(chatId, "Отправьте текст рассылки всем пользователям.", adminWaitingReplyKeyboard());
+                apiClient.sendMessage(chatId,
+                        "Отправьте текст или одним сообщением фото/видео с подписью для рассылки.",
+                        adminWaitingReplyKeyboard());
+            }
+            case "admin:ad_frequency" -> {
+                adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_AD_FREQUENCY);
+                apiClient.sendMessage(chatId,
+                        "Отправьте число N: реклама будет показана после каждого N-го скачивания пользователя.",
+                        adminWaitingReplyKeyboard());
             }
             case "admin:add_admin" -> {
                 adminConversationService.set(user.getTelegramId(), AdminConversationState.WAITING_ADD_ADMIN);
@@ -272,6 +302,22 @@ public class TelegramUpdateHandler {
         );
     }
 
+    private MediaContent mediaContent(JsonNode message) {
+        String text = message.hasNonNull("caption")
+                ? message.path("caption").asText("")
+                : message.path("text").asText("");
+        JsonNode photos = message.path("photo");
+        if (photos.isArray() && !photos.isEmpty()) {
+            String fileId = photos.path(photos.size() - 1).path("file_id").asText("");
+            return new MediaContent(AdMediaType.PHOTO, fileId, text);
+        }
+        String videoFileId = message.path("video").path("file_id").asText("");
+        if (!videoFileId.isBlank()) {
+            return new MediaContent(AdMediaType.VIDEO, videoFileId, text);
+        }
+        return new MediaContent(null, null, text);
+    }
+
     private String textOrNull(JsonNode node, String name) {
         JsonNode value = node.path(name);
         return value.isMissingNode() ? null : value.asText();
@@ -299,6 +345,7 @@ public class TelegramUpdateHandler {
                         new TelegramApiClient.Button("Отключить рекламу", "admin:ad_after_off")),
                 List.of(new TelegramApiClient.Button("Рассылка", "admin:broadcast"),
                         new TelegramApiClient.Button("Ошибки", "admin:errors")),
+                List.of(new TelegramApiClient.Button("Частота рекламы", "admin:ad_frequency")),
                 List.of(new TelegramApiClient.Button("Добавить админа", "admin:add_admin"),
                         new TelegramApiClient.Button("Удалить админа", "admin:remove_admin"))
         ));
@@ -309,6 +356,7 @@ public class TelegramUpdateHandler {
                 List.of("Статистика", "Платформы"),
                 List.of("Реклама после скачивания", "Отключить рекламу"),
                 List.of("Рассылка", "Ошибки"),
+                List.of("Частота рекламы"),
                 List.of("Добавить админа", "Удалить админа")
         ), true, false, true);
     }
@@ -319,6 +367,7 @@ public class TelegramUpdateHandler {
                 List.of("Статистика", "Платформы"),
                 List.of("Реклама после скачивания", "Отключить рекламу"),
                 List.of("Рассылка", "Ошибки"),
+                List.of("Частота рекламы"),
                 List.of("Добавить админа", "Удалить админа")
         ), true, false, true);
     }

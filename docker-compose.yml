@@ -14,12 +14,14 @@ services:
       ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS:-}
       DATA_HASH_KEY: ${DATA_HASH_KEY:?DATA_HASH_KEY must be set}
       YTDLP_COMMAND: yt-dlp
+      YTDLP_COOKIES_FILE: /run/secrets/youtube-cookies.txt
       LOG_DIR: /app/logs
       HOME: /tmp
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
     volumes:
       - ./storage:/app/storage
       - ./tmp:/app/tmp
+      - ./secrets:/run/secrets:ro
     restart: unless-stopped
     read_only: true
     tmpfs:

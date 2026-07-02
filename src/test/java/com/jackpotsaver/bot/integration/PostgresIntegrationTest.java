@@ -63,12 +63,14 @@ class PostgresIntegrationTest {
         Integer version = jdbcTemplate.queryForObject(
                 "select max(version::integer) from flyway_schema_history where success", Integer.class);
 
-        assertThat(version).isEqualTo(14);
+        assertThat(version).isEqualTo(15);
         assertThat(tableExists("telegram_updates")).isTrue();
         assertThat(tableExists("download_job_subscribers")).isTrue();
         assertThat(columnExists("stored_files", "normalized_url")).isFalse();
         assertThat(columnExists("download_requests", "resource_key")).isTrue();
         assertThat(columnNullable("download_requests", "source_url")).isTrue();
+        assertThat(columnExists("ad_settings", "telegram_file_id")).isTrue();
+        assertThat(columnExists("users", "completed_downloads")).isTrue();
     }
 
     @Test

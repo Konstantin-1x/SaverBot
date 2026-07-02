@@ -40,6 +40,7 @@ public class UpdateOrchestrator {
     private final TransactionTemplate transactionTemplate;
     private final JdbcTemplate jdbcTemplate;
     private final ResourceKeyService resourceKeyService;
+    private final TelegramContentSender contentSender;
 
     public UpdateOrchestrator(PlatformDetector platformDetector, MessageCatalog messages, LimitService limitService,
                               PlatformService platformService, CacheService cacheService,
@@ -47,7 +48,7 @@ public class UpdateOrchestrator {
                               DownloadJobSubscriberRepository subscriberRepository,
                               TelegramApiClient telegramApiClient, AdService adService, Clock clock,
                               TransactionTemplate transactionTemplate, JdbcTemplate jdbcTemplate,
-                              ResourceKeyService resourceKeyService) {
+                              ResourceKeyService resourceKeyService, TelegramContentSender contentSender) {
         this.platformDetector = platformDetector;
         this.messages = messages;
         this.limitService = limitService;
@@ -62,6 +63,7 @@ public class UpdateOrchestrator {
         this.transactionTemplate = transactionTemplate;
         this.jdbcTemplate = jdbcTemplate;
         this.resourceKeyService = resourceKeyService;
+        this.contentSender = contentSender;
     }
 
     public void handleText(long chatId, User user, String text) {
@@ -133,6 +135,7 @@ public class UpdateOrchestrator {
     private RequestAction cachedAction(DownloadRequest request, StoredFile file, InterfaceLanguage language) {
         return RequestAction.cached(
                 request.getId(),
+                request.getUser().getId(),
                 language,
                 file.getId(),
                 file.getFilePath(),
@@ -168,7 +171,7 @@ public class UpdateOrchestrator {
         if (loadingId != null) {
             telegramApiClient.deleteMessage(chatId, loadingId);
         }
-        sendAfterDownloadAd(chatId);
+        sendAfterDownloadAd(chatId, action.userId());
         log.info("Sent cached file {} for request {}", action.storedFileId(), action.requestId());
     }
 
@@ -208,10 +211,10 @@ public class UpdateOrchestrator {
                 }));
     }
 
-    private void sendAfterDownloadAd(long chatId) {
-        adService.afterDownloadText().ifPresent(text -> {
+    private void sendAfterDownloadAd(long chatId, Long userId) {
+        adService.contentForCompletedDownload(userId).ifPresent(content -> {
             try {
-                telegramApiClient.sendMessage(chatId, text);
+                contentSender.send(chatId, content);
             } catch (RuntimeException ex) {
                 log.warn("Could not send after-download ad", ex);
             }
@@ -223,15 +226,19 @@ public class UpdateOrchestrator {
         QUEUE
     }
 
-    private record RequestAction(ActionType type, Long requestId, InterfaceLanguage language, Long storedFileId,
+    private record RequestAction(ActionType type, Long requestId, Long userId,
+                                 InterfaceLanguage language, Long storedFileId,
                                  String filePath, String telegramFileId, Platform platform) {
-        private static RequestAction cached(Long requestId, InterfaceLanguage language, Long storedFileId,
+        private static RequestAction cached(Long requestId, Long userId,
+                                            InterfaceLanguage language, Long storedFileId,
                                             String filePath, String telegramFileId, Platform platform) {
-            return new RequestAction(ActionType.CACHED, requestId, language, storedFileId, filePath, telegramFileId, platform);
+            return new RequestAction(
+                    ActionType.CACHED, requestId, userId, language,
+                    storedFileId, filePath, telegramFileId, platform);
         }
 
         private static RequestAction queue(Long requestId, InterfaceLanguage language) {
-            return new RequestAction(ActionType.QUEUE, requestId, language, null, null, null, null);
+            return new RequestAction(ActionType.QUEUE, requestId, null, language, null, null, null, null);
         }
     }
 }

@@ -14,7 +14,6 @@ import com.jackpotsaver.bot.repository.DownloadRequestRepository;
 import com.jackpotsaver.bot.repository.ErrorLogRepository;
 import com.jackpotsaver.bot.repository.StoredFileRepository;
 import com.jackpotsaver.bot.repository.UserRepository;
-import com.jackpotsaver.bot.telegram.TelegramApiClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Arrays;
@@ -32,14 +31,14 @@ public class AdminService {
     private final AdminActionRepository adminActionRepository;
     private final PlatformService platformService;
     private final AdService adService;
-    private final TelegramApiClient telegramApiClient;
+    private final TelegramContentSender contentSender;
     private final Clock clock;
     private final AdminProperties adminProperties;
 
     public AdminService(UserRepository userRepository, DownloadRequestRepository requestRepository,
                         DownloadJobRepository jobRepository, ErrorLogRepository errorLogRepository,
                         StoredFileRepository storedFileRepository, AdminActionRepository adminActionRepository,
-                        PlatformService platformService, AdService adService, TelegramApiClient telegramApiClient,
+                        PlatformService platformService, AdService adService, TelegramContentSender contentSender,
                         Clock clock, AdminProperties adminProperties) {
         this.userRepository = userRepository;
         this.requestRepository = requestRepository;
@@ -49,7 +48,7 @@ public class AdminService {
         this.adminActionRepository = adminActionRepository;
         this.platformService = platformService;
         this.adService = adService;
-        this.telegramApiClient = telegramApiClient;
+        this.contentSender = contentSender;
         this.clock = clock;
         this.adminProperties = adminProperties;
     }
@@ -102,13 +101,31 @@ public class AdminService {
 
     @Transactional
     public String setAfterDownloadAd(User admin, String text) {
-        if (text == null || text.isBlank()) {
+        return setAfterDownloadAd(admin, new MediaContent(null, null, text));
+    }
+
+    @Transactional
+    public String setAfterDownloadAd(User admin, MediaContent content) {
+        if (content == null || content.empty()) {
             return "Использование: /ad_after текст рекламы";
         }
-        String normalized = text.trim();
-        adService.setAfterDownloadText(normalized, admin);
+        if (!content.validLength()) {
+            return "Текст слишком длинный: максимум 1024 символа для медиа и 4096 для текста.";
+        }
+        adService.setAfterDownloadContent(content, admin);
         adminActionRepository.save(new AdminAction(admin, "SET_AFTER_DOWNLOAD_AD", null, null, clock.instant()));
         return "Реклама после скачивания обновлена.";
+    }
+
+    @Transactional
+    public String setAdFrequency(User admin, long frequency) {
+        if (frequency < 1 || frequency > 100_000) {
+            return "Частота должна быть числом от 1 до 100000.";
+        }
+        adService.setFrequency((int) frequency, admin);
+        adminActionRepository.save(new AdminAction(
+                admin, "SET_AD_FREQUENCY", null, "frequency=" + frequency, clock.instant()));
+        return "Реклама будет отправляться после каждого " + frequency + "-го скачивания пользователя.";
     }
 
     @Transactional
@@ -118,17 +135,22 @@ public class AdminService {
         return "Реклама после скачивания отключена.";
     }
 
-    @Transactional
     public String broadcast(User admin, String text) {
-        if (text == null || text.isBlank()) {
+        return broadcast(admin, new MediaContent(null, null, text));
+    }
+
+    public String broadcast(User admin, MediaContent content) {
+        if (content == null || content.empty()) {
             return "Использование: /broadcast текст рассылки";
+        }
+        if (!content.validLength()) {
+            return "Текст слишком длинный: максимум 1024 символа для медиа и 4096 для текста.";
         }
         int success = 0;
         int failed = 0;
-        String normalized = text.trim();
         for (User user : userRepository.findAll()) {
             try {
-                telegramApiClient.sendMessage(user.getTelegramId(), normalized);
+                contentSender.send(user.getTelegramId(), content);
                 success++;
             } catch (RuntimeException ex) {
                 failed++;
@@ -146,9 +168,10 @@ public class AdminService {
                 /block <telegram_id> - заблокировать пользователя
                 /unblock <telegram_id> - разблокировать пользователя
                 /platforms <YOUTUBE|YOUTUBE_SHORTS|INSTAGRAM|TIKTOK> <on|off> - платформы
-                /ad_after <текст> - реклама после каждого скачивания
+                /ad_after <текст> - текстовая реклама; фото/видео задаются через админ-панель
                 /ad_after_off - отключить рекламу после скачивания
-                /broadcast <текст> - разовая рассылка всем пользователям
+                /ad_frequency <N> - реклама после каждого N-го скачивания пользователя
+                /broadcast <текст> - текстовая рассылка; фото/видео доступны через админ-панель
                 Добавление и удаление админов доступно через кнопки админ-панели.
                 /errors - последние ошибки
                 """;

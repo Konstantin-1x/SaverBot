@@ -34,6 +34,7 @@ public class DownloadJobProcessor {
     private final MessageCatalog messages;
     private final ErrorLogService errorLogService;
     private final AdService adService;
+    private final TelegramContentSender contentSender;
     private final DownloadProperties properties;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
@@ -43,7 +44,8 @@ public class DownloadJobProcessor {
                                 DownloadRequestRepository requestRepository,
                                 VideoDownloader downloader, TelegramApiClient telegramApiClient,
                                 MessageCatalog messages, ErrorLogService errorLogService,
-                                AdService adService, DownloadProperties properties, Clock clock,
+                                AdService adService, TelegramContentSender contentSender,
+                                DownloadProperties properties, Clock clock,
                                 TransactionTemplate transactionTemplate) {
         this.jobRepository = jobRepository;
         this.storedFileRepository = storedFileRepository;
@@ -54,6 +56,7 @@ public class DownloadJobProcessor {
         this.messages = messages;
         this.errorLogService = errorLogService;
         this.adService = adService;
+        this.contentSender = contentSender;
         this.properties = properties;
         this.clock = clock;
         this.transactionTemplate = transactionTemplate;
@@ -92,7 +95,7 @@ public class DownloadJobProcessor {
             String telegramFileId = extractTelegramFileId(response);
             finishJob(jobId, file.storedFileId(), telegramFileId);
             deleteLoading(file.telegramChatId(), file.loadingMessageId());
-            sendAfterDownloadAd(file.telegramChatId());
+            sendAfterDownloadAd(file.telegramChatId(), file.userId());
             deliverSubscribers(jobId, file, telegramFileId);
             log.info("Sent request {} to Telegram in {} ms; totalJobMs={}; telegramFileIdStored={}",
                     file.requestId(),
@@ -120,7 +123,7 @@ public class DownloadJobProcessor {
                 }
                 markSubscriberSuccess(subscriber.requestId());
                 deleteLoading(subscriber.chatId(), subscriber.loadingMessageId());
-                sendAfterDownloadAd(subscriber.chatId());
+                sendAfterDownloadAd(subscriber.chatId(), subscriber.userId());
             } catch (RuntimeException ex) {
                 markSubscriberFailed(subscriber.requestId(), "TELEGRAM_SEND_FAILED");
                 log.warn("Could not deliver shared job {} to request {}", jobId, subscriber.requestId(), ex);
@@ -143,7 +146,8 @@ public class DownloadJobProcessor {
                 .map(item -> {
                     DownloadRequest request = item.getRequest();
                     return new SubscriberSnapshot(
-                            request.getId(), request.getTelegramChatId(), request.getLoadingMessageId(),
+                            request.getId(), request.getUser().getId(),
+                            request.getTelegramChatId(), request.getLoadingMessageId(),
                             request.getUser().getInterfaceLanguage());
                 })
                 .toList());
@@ -221,6 +225,7 @@ public class DownloadJobProcessor {
             return new StoredFileSnapshot(
                     file.getId(),
                     request.getId(),
+                    request.getUser().getId(),
                     request.getTelegramChatId(),
                     request.getLoadingMessageId(),
                     file.getFilePath(),
@@ -245,6 +250,7 @@ public class DownloadJobProcessor {
     }
 
     private void failJob(Long jobId, String code, String details, Exception exception) {
+        String safeDetails = SensitiveDataSanitizer.sanitize(details);
         transactionTemplate.executeWithoutResult(status -> {
             var job = jobRepository.findById(jobId).orElse(null);
             if (job == null) {
@@ -253,15 +259,16 @@ public class DownloadJobProcessor {
             DownloadRequest request = job.getRequest();
             request.fail(code, clock.instant());
             request.redactUrls();
-            job.fail(code, details, clock.instant());
+            job.fail(code, safeDetails, clock.instant());
             if (exception != null) {
                 errorLogService.record(request.getUser(), request, code,
-                        SensitiveDataSanitizer.sanitize(details), exception);
+                        safeDetails, exception);
             }
         });
     }
 
     private boolean retryOrDeadLetter(Long jobId, String code, String details, Exception exception) {
+        String safeDetails = SensitiveDataSanitizer.sanitize(details);
         Boolean deadLettered = transactionTemplate.execute(status -> {
             var job = jobRepository.findById(jobId).orElse(null);
             if (job == null) {
@@ -272,15 +279,15 @@ public class DownloadJobProcessor {
             if (exhausted) {
                 request.fail(code, clock.instant());
                 request.redactUrls();
-                job.deadLetter(code, details, clock.instant());
+                job.deadLetter(code, safeDetails, clock.instant());
             } else {
                 long multiplier = Math.max(1, job.getAttemptCount());
                 Instant nextAttempt = clock.instant().plusSeconds(properties.retryDelaySeconds() * multiplier);
-                job.retry(code, details, nextAttempt);
+                job.retry(code, safeDetails, nextAttempt);
                 request.status(RequestStatus.LOADING, clock.instant());
             }
             errorLogService.record(request.getUser(), request, code,
-                    SensitiveDataSanitizer.sanitize(details), exception);
+                    safeDetails, exception);
             return exhausted;
         });
         if (Boolean.TRUE.equals(deadLettered)) {
@@ -314,13 +321,13 @@ public class DownloadJobProcessor {
         }
     }
 
-    private void sendAfterDownloadAd(Long telegramChatId) {
-        if (telegramChatId == null) {
+    private void sendAfterDownloadAd(Long telegramChatId, Long userId) {
+        if (telegramChatId == null || userId == null) {
             return;
         }
-        adService.afterDownloadText().ifPresent(text -> {
+        adService.contentForCompletedDownload(userId).ifPresent(content -> {
             try {
-                telegramApiClient.sendMessage(telegramChatId, text);
+                contentSender.send(telegramChatId, content);
             } catch (RuntimeException ex) {
                 log.warn("Could not send after-download ad", ex);
             }
@@ -344,12 +351,13 @@ public class DownloadJobProcessor {
                                  com.jackpotsaver.bot.domain.InterfaceLanguage language) {
     }
 
-    private record StoredFileSnapshot(Long storedFileId, Long requestId, Long telegramChatId, Integer loadingMessageId,
+    private record StoredFileSnapshot(Long storedFileId, Long requestId, Long userId,
+                                      Long telegramChatId, Integer loadingMessageId,
                                       String filePath, long fileSize, Platform platform,
                                       com.jackpotsaver.bot.domain.InterfaceLanguage language) {
     }
 
-    private record SubscriberSnapshot(Long requestId, Long chatId, Integer loadingMessageId,
+    private record SubscriberSnapshot(Long requestId, Long userId, Long chatId, Integer loadingMessageId,
                                       com.jackpotsaver.bot.domain.InterfaceLanguage language) {
     }
 }

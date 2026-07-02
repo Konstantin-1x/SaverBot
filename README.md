@@ -63,6 +63,9 @@ Admin access is granted by Telegram IDs from `ADMIN_TELEGRAM_IDS`.
 - `/unblock <telegram_id>`
 - `/platforms <YOUTUBE|YOUTUBE_SHORTS|INSTAGRAM|TIKTOK> <on|off>`
 - `/errors`
+- `/ad_after <text>` or use the admin panel to send photo/video with a caption
+- `/ad_frequency <N>` - show the ad after every Nth completed download per user
+- `/broadcast <text>` or use the admin panel to broadcast photo/video with a caption
 
 ## Configuration
 
@@ -81,6 +84,7 @@ Important environment variables:
 - `LIMIT_REQUEST_COOLDOWN_SECONDS`
 - `LIMIT_DOWNLOADS_PER_DAY`
 - `YTDLP_COMMAND`
+- `YTDLP_COOKIES_FILE` - optional Netscape-format YouTube cookies file
 - `BOT_CONNECT_TIMEOUT_SECONDS`
 - `BOT_RESPONSE_TIMEOUT_SECONDS`
 - `BOT_MAX_RETRIES`
@@ -102,3 +106,24 @@ Important environment variables:
 ```
 
 PostgreSQL integration tests use Testcontainers and require a running Docker daemon.
+
+## YouTube authentication
+
+The downloader first uses Deno, browser impersonation and alternate YouTube
+player clients. If a server IP is still challenged with “Sign in to confirm
+you’re not a bot”, export a fresh Netscape-format `cookies.txt` from a
+dedicated YouTube account and place it at:
+
+```text
+secrets/youtube-cookies.txt
+```
+
+On Linux, make it readable only by the non-root application user:
+
+```bash
+sudo chown "$(id -u):10001" secrets/youtube-cookies.txt
+sudo chmod 640 secrets/youtube-cookies.txt
+docker compose up -d --force-recreate app
+```
+
+Never commit this file. Refresh it when YouTube expires the session.

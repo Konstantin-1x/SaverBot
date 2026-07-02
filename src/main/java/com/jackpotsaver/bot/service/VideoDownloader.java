@@ -78,6 +78,14 @@ public class VideoDownloader {
             command.add("--no-progress");
             command.add("--js-runtimes");
             command.add("deno");
+            command.add("--impersonate");
+            command.add("chrome");
+            command.add("--extractor-args");
+            command.add("youtube:player_client=android_vr,web_embedded");
+            if (properties.cookiesFile() != null && Files.isRegularFile(properties.cookiesFile())) {
+                command.add("--cookies");
+                command.add(properties.cookiesFile().toString());
+            }
             command.add("--socket-timeout");
             command.add("8");
             command.add("--retries");

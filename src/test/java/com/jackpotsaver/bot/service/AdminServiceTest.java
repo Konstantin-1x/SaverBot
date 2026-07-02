@@ -15,7 +15,6 @@ import com.jackpotsaver.bot.repository.DownloadRequestRepository;
 import com.jackpotsaver.bot.repository.ErrorLogRepository;
 import com.jackpotsaver.bot.repository.StoredFileRepository;
 import com.jackpotsaver.bot.repository.UserRepository;
-import com.jackpotsaver.bot.telegram.TelegramApiClient;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -34,7 +33,7 @@ class AdminServiceTest {
             actionRepository,
             mock(PlatformService.class),
             mock(AdService.class),
-            mock(TelegramApiClient.class),
+            mock(TelegramContentSender.class),
             Clock.fixed(Instant.parse("2026-06-15T00:00:00Z"), ZoneOffset.UTC),
             new AdminProperties("42")
     );
